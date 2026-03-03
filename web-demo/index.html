@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lerncards Browser Demo</title>
+  <style>
+    body { font-family: Inter, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 24px; }
+    .card { background: #1e293b; border-radius: 16px; padding: 18px; margin-top: 14px; }
+    button { border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+    .primary { background: #38bdf8; color: #082f49; font-weight: 700; }
+    .good { background: #22c55e; color: #052e16; }
+    .bad { background: #f97316; color: #431407; }
+    .muted { background: #334155; color: #e2e8f0; }
+    .flip { min-height: 220px; display: flex; flex-direction: column; gap: 12px; justify-content: center; }
+    input { border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #e2e8f0; padding: 8px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Lerncards – Browser Demo</h1>
+  <p>JSON laden, Deck auswählen, Karte antippen, dann mit Richtig/Falsch bewerten.</p>
+  <div class="card">
+    <div class="row">
+      <input id="file" type="file" accept="application/json" />
+      <span id="status">Bitte JSON importieren.</span>
+    </div>
+  </div>
+  <div id="home" class="card"></div>
+  <div id="review" class="card" style="display:none"></div>
+</div>
+<script>
+const state = {decks: [], activeDeckId: null, activeCardId: null, revealed: false};
+const today = () => Math.floor(Date.now()/86400000);
+
+function priority(stats){
+  const overdue = Math.max(0, today()-stats.dueDay);
+  const struggle = stats.wrongCount*2 + (3-Math.min(3, stats.correctStreak));
+  return overdue*2.5 + struggle + (1/stats.easeFactor);
+}
+function nextCard(deck){
+  const due = deck.cards.filter(c => c.stats.dueDay <= today());
+  const pool = due.length ? due : deck.cards;
+  return pool.sort((a,b)=>priority(b.stats)-priority(a.stats))[0];
+}
+function register(card, correct){
+  const s = card.stats;
+  if(correct){
+    const streak = s.correctStreak + 1;
+    const interval = streak===1?1:streak===2?3:Math.max(1, Math.floor(s.intervalDays*s.easeFactor));
+    card.stats = {...s, intervalDays: interval, easeFactor: Math.min(3, s.easeFactor+0.08), correctStreak: streak, dueDay: today()+interval, lastReviewedDay: today()};
+  } else {
+    const reduced = Math.max(1, Math.floor(s.intervalDays/2));
+    card.stats = {...s, intervalDays: reduced, easeFactor: Math.max(1.3, s.easeFactor-0.2), correctStreak: 0, wrongCount: s.wrongCount+1, dueDay: today(), lastReviewedDay: today()};
+  }
+}
+function renderHome(){
+  const home = document.getElementById('home');
+  if(!state.decks.length){ home.innerHTML = '<p>Noch keine Kartensätze.</p>'; return; }
+  home.innerHTML = '<h2>Hauptmenü</h2>' + state.decks.map(d => `
+    <div class="card">
+      <strong>${d.title}</strong><br>${d.description || ''}<br>Karten: ${d.cards.length}
+      <div class="row" style="margin-top:8px">
+        <button class="primary" onclick="startReview('${d.id}')">Lernen</button>
+        <input id="rename-${d.id}" value="${d.title}" />
+        <button class="muted" onclick="renameDeck('${d.id}')">Umbenennen</button>
+      </div>
+    </div>`).join('');
+}
+function renderReview(){
+  const review = document.getElementById('review');
+  const deck = state.decks.find(d=>d.id===state.activeDeckId);
+  if(!deck){ review.style.display='none'; return; }
+  const card = deck.cards.find(c=>c.id===state.activeCardId) || nextCard(deck);
+  state.activeCardId = card?.id;
+  if(!card){ review.innerHTML='<p>Keine Karten verfügbar.</p>'; return; }
+  review.style.display='block';
+  review.innerHTML = `
+    <div class="row"><button class="muted" onclick="backHome()">Zurück</button><h2>${deck.title}</h2></div>
+    <div class="card flip" onclick="toggleReveal()">
+      ${state.revealed ? `<h3>Antwort</h3><div>${card.answer}</div><h4>Anwendungsfall</h4><div>${card.useCase||'-'}</div>` : `<h3>Frage</h3><div>${card.question}</div><small>Tippen zum Umdrehen</small>`}
+    </div>
+    <div class="row">
+      <button class="bad" onclick="answer(false)">Falsch</button>
+      <button class="good" onclick="answer(true)">Richtig</button>
+    </div>`;
+}
+function startReview(id){ state.activeDeckId=id; state.revealed=false; state.activeCardId=null; renderReview(); }
+function backHome(){ document.getElementById('review').style.display='none'; state.activeDeckId=null; renderHome(); }
+function toggleReveal(){ state.revealed=!state.revealed; renderReview(); }
+function answer(correct){
+  const deck = state.decks.find(d=>d.id===state.activeDeckId); const card = deck.cards.find(c=>c.id===state.activeCardId);
+  register(card, correct); state.revealed=false; state.activeCardId = nextCard(deck)?.id; renderReview();
+}
+function renameDeck(id){
+  const v = document.getElementById('rename-'+id).value.trim();
+  if(!v) return;
+  const d = state.decks.find(x=>x.id===id); d.title=v; renderHome();
+}
+window.startReview=startReview;window.backHome=backHome;window.toggleReveal=toggleReveal;window.answer=answer;window.renameDeck=renameDeck;
+
+document.getElementById('file').addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const raw = await file.text();
+  try{
+    const parsed = JSON.parse(raw);
+    if(!parsed.cards?.length) throw new Error('Keine Karten');
+    const deck = {id: crypto.randomUUID(), title: parsed.title || 'Ohne Titel', description: parsed.description || '', cards: parsed.cards.map(c=>({id: crypto.randomUUID(), question:c.question, answer:c.answer, useCase:c.use_case||'', stats:{intervalDays:0,easeFactor:2.5,correctStreak:0,wrongCount:0,lastReviewedDay:null,dueDay:today()}}))};
+    state.decks.push(deck);
+    document.getElementById('status').textContent = 'Import erfolgreich.';
+    renderHome();
+  }catch(err){ document.getElementById('status').textContent = 'Import fehlgeschlagen: '+err.message; }
+});
+renderHome();
+</script>
+</body>
+</html>
