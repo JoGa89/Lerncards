@@ -27,6 +27,14 @@ Eine moderne Android-Lernkarten-App (Jetpack Compose) mit adaptivem Wiederholung
 }
 ```
 
+
+## JSON Schema (für KI-Generierung)
+Ein maschinenlesbares Schema für den Import liegt hier:
+- `docs/deck-import.schema.json`
+
+Wenn du Prompts für eine KI baust, kannst du sie anweisen, **genau dieses Schema** zu erfüllen.
+
+
 ## Browser-Demo (zum schnellen Testen)
 Falls du ohne Android-Emulator testen willst:
 1. `cd web-demo`
