@@ -34,6 +34,7 @@ Ein maschinenlesbares Schema für den Import liegt hier:
 
 Wenn du Prompts für eine KI baust, kannst du sie anweisen, **genau dieses Schema** zu erfüllen.
 
+
 ## Browser-Demo (zum schnellen Testen)
 Falls du ohne Android-Emulator testen willst:
 1. `cd web-demo`
